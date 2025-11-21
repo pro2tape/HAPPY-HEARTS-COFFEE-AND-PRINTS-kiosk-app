@@ -1,0 +1,5 @@
+{
+  "name": "Happy Hearts Kiosk",
+  "description": "A dual-interface kiosk application for customers to order food/drinks and admins to manage orders and staff attendance.",
+  "requestFramePermissions": []
+}
