@@ -21,6 +21,7 @@ export interface MenuItem {
   basePrice?: number;
   variants?: MenuItemVariant[];
   description?: string;
+  image?: string;
 }
 
 export interface CartItem extends MenuItem {

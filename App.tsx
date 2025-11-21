@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Utensils, User, Clock, TrendingUp, Home, Coffee, Sparkles, Trash2, Plus, Minus, CheckCircle, LogOut, Play, Pause, Grid, IceCream, Sandwich, Soup, GlassWater, Beer, Printer, X, Settings, Download, FileSpreadsheet, Monitor, Lock, AlertCircle } from 'lucide-react';
-import { MENU_ITEMS, STAFF_MEMBERS as INITIAL_STAFF_MEMBERS } from './constants';
+import { ShoppingCart, Utensils, User, Clock, TrendingUp, Home, Coffee, Sparkles, Trash2, Plus, Minus, CheckCircle, LogOut, Play, Pause, Grid, IceCream, Sandwich, Soup, GlassWater, Beer, Printer, X, Settings, Download, FileSpreadsheet, Monitor, Lock, AlertCircle, Image as ImageIcon, Upload } from 'lucide-react';
+import { MENU_ITEMS as INITIAL_MENU_ITEMS, STAFF_MEMBERS as INITIAL_STAFF_MEMBERS } from './constants';
 import { CartItem, Category, MenuItem, MenuItemVariant, Order, OrderStatus, StaffLog, StaffMember } from './types';
 import { getRecommendation } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -171,8 +171,10 @@ const CategoryIcon = ({ category, className, size }: { category: Category; class
 };
 
 const KioskMenu = ({ 
+  items,
   addToCart 
 }: { 
+  items: MenuItem[],
   addToCart: (item: MenuItem, variant?: MenuItemVariant) => void 
 }) => {
   const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All');
@@ -182,13 +184,13 @@ const KioskMenu = ({
   const [isThinking, setIsThinking] = useState(false);
 
   const filteredItems = activeCategory === 'All' 
-    ? MENU_ITEMS 
-    : MENU_ITEMS.filter(i => i.category === activeCategory);
+    ? items 
+    : items.filter(i => i.category === activeCategory);
 
   const handleAiRecommend = async () => {
     if(!mood) return;
     setIsThinking(true);
-    const rec = await getRecommendation(mood, MENU_ITEMS);
+    const rec = await getRecommendation(mood, items);
     setRecommendation(rec);
     setIsThinking(false);
   };
@@ -261,15 +263,24 @@ const KioskMenu = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 print:hidden">
         {filteredItems.map(item => (
           <div key={item.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all border border-gray-100 flex flex-col group h-full overflow-hidden">
-            <div className={`p-3 flex items-center justify-between ${getCategoryColor(item.category)}`}>
-               <span className="text-xs font-bold uppercase tracking-wider opacity-90">{item.category}</span>
-               <CategoryIcon category={item.category} className="w-4 h-4 opacity-75" />
-            </div>
+            {item.image ? (
+              <div className="relative h-48 w-full overflow-hidden bg-gray-100">
+                 <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                 <div className={`absolute top-2 right-2 p-1.5 rounded-full shadow-sm ${getCategoryColor(item.category)}`}>
+                    <CategoryIcon category={item.category} className="w-4 h-4" />
+                 </div>
+              </div>
+            ) : (
+              <div className={`p-3 flex items-center justify-between ${getCategoryColor(item.category)}`}>
+                 <span className="text-xs font-bold uppercase tracking-wider opacity-90">{item.category}</span>
+                 <CategoryIcon category={item.category} className="w-4 h-4 opacity-75" />
+              </div>
+            )}
             
             <div className="p-5 flex flex-col flex-grow">
               <h3 className="font-bold text-gray-800 text-lg mb-1 leading-tight group-hover:text-orange-600 transition-colors">{item.name}</h3>
               {item.description && (
-                <p className="text-sm text-gray-500 mb-4 leading-relaxed">{item.description}</p>
+                <p className="text-sm text-gray-500 mb-4 leading-relaxed line-clamp-2">{item.description}</p>
               )}
               
               <div className="mt-auto pt-4">
@@ -306,9 +317,16 @@ const KioskMenu = ({
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl animate-scale-in">
             <div className="flex justify-between items-start mb-4">
-              <div>
-                 <h3 className="text-2xl font-bold text-gray-900">{selectedItem.name}</h3>
-                 <p className="text-gray-500 text-sm">{selectedItem.category}</p>
+              <div className="flex gap-3">
+                 {selectedItem.image && (
+                   <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                     <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-full object-cover" />
+                   </div>
+                 )}
+                 <div>
+                    <h3 className="text-2xl font-bold text-gray-900">{selectedItem.name}</h3>
+                    <p className="text-gray-500 text-sm">{selectedItem.category}</p>
+                 </div>
               </div>
               <button onClick={() => setSelectedItem(null)} className="text-gray-400 hover:text-gray-600 p-1">
                 <X size={24} />
@@ -376,8 +394,12 @@ const CartPage = ({
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
         {cart.map(item => (
           <div key={item.cartId} className="p-4 border-b border-gray-100 flex items-center gap-4 last:border-0">
-            <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center text-orange-600">
-               <CategoryIcon category={item.category} size={20} />
+            <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center text-orange-600 flex-shrink-0 overflow-hidden">
+               {item.image ? (
+                 <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+               ) : (
+                 <CategoryIcon category={item.category} size={20} />
+               )}
             </div>
             <div className="flex-grow">
               <h3 className="font-bold text-gray-800">{item.name}</h3>
@@ -1045,7 +1067,9 @@ const SettingsPage = ({
   autoPrint, 
   onToggleAutoPrint,
   adminPin,
-  onUpdateAdminPin
+  onUpdateAdminPin,
+  menuItems,
+  onUpdateMenuItem
 }: { 
   staffMembers: StaffMember[], 
   onAddStaff: (staff: StaffMember) => void,
@@ -1053,7 +1077,9 @@ const SettingsPage = ({
   autoPrint: boolean,
   onToggleAutoPrint: (val: boolean) => void,
   adminPin: string,
-  onUpdateAdminPin: (newPin: string) => void
+  onUpdateAdminPin: (newPin: string) => void,
+  menuItems: MenuItem[],
+  onUpdateMenuItem: (id: string, image: string | undefined) => void
 }) => {
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
@@ -1108,6 +1134,18 @@ const SettingsPage = ({
 
   const launchKiosk = () => {
     window.open('/#/', '_blank', 'popup=yes,width=1024,height=768');
+  };
+
+  // Handle image file upload
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, itemId: string) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onUpdateMenuItem(itemId, reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
@@ -1183,6 +1221,62 @@ const SettingsPage = ({
             </button>
           </form>
         </div>
+      </div>
+
+      {/* Menu Image Management Section */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
+         <h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">
+            <ImageIcon size={20} className="text-orange-600"/> Menu Image Management
+         </h3>
+         <p className="text-sm text-gray-500 mb-4">Upload images for your menu items. These will be displayed on the customer kiosk.</p>
+         
+         <div className="h-96 overflow-y-auto custom-scrollbar border border-gray-100 rounded-xl">
+           <table className="w-full text-left text-sm">
+             <thead className="bg-gray-50 sticky top-0 z-10">
+               <tr>
+                 <th className="p-3 font-semibold">Item Name</th>
+                 <th className="p-3 font-semibold">Category</th>
+                 <th className="p-3 font-semibold text-center">Image Preview</th>
+                 <th className="p-3 font-semibold text-center">Action</th>
+               </tr>
+             </thead>
+             <tbody className="divide-y divide-gray-50">
+               {menuItems.map(item => (
+                 <tr key={item.id} className="hover:bg-gray-50">
+                   <td className="p-3 font-medium">{item.name}</td>
+                   <td className="p-3 text-gray-500">
+                     <span className="px-2 py-1 bg-gray-100 rounded text-xs">{item.category}</span>
+                   </td>
+                   <td className="p-3 text-center">
+                     {item.image ? (
+                       <img src={item.image} alt={item.name} className="w-12 h-12 object-cover rounded-lg mx-auto border border-gray-200" />
+                     ) : (
+                       <div className="w-12 h-12 bg-gray-100 rounded-lg mx-auto flex items-center justify-center text-gray-400">
+                         <ImageIcon size={16} />
+                       </div>
+                     )}
+                   </td>
+                   <td className="p-3 text-center">
+                     <div className="flex justify-center gap-2">
+                       <label className="cursor-pointer bg-white border border-gray-200 hover:bg-orange-50 hover:border-orange-200 text-gray-600 hover:text-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1">
+                         <Upload size={14} /> Upload
+                         <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, item.id)} />
+                       </label>
+                       {item.image && (
+                         <button 
+                           onClick={() => onUpdateMenuItem(item.id, undefined)}
+                           className="bg-white border border-gray-200 hover:bg-red-50 hover:border-red-200 text-red-500 px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                         >
+                           <Trash2 size={14} />
+                         </button>
+                       )}
+                     </div>
+                   </td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1264,6 +1358,8 @@ export default function App() {
   const [kioskSettings, setKioskSettings] = useState({ autoPrint: false });
   // New state for Admin PIN
   const [adminPin, setAdminPin] = useState('1234');
+  // New state for Menu Items
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(INITIAL_MENU_ITEMS);
   
   const navigate = useNavigate();
 
@@ -1336,12 +1432,16 @@ export default function App() {
     setStaffList(prev => prev.filter(s => s.id !== id));
   };
 
+  const updateMenuItemImage = (id: string, image: string | undefined) => {
+    setMenuItems(prev => prev.map(item => item.id === id ? { ...item, image } : item));
+  };
+
   return (
     <Routes>
       {/* Public Customer Routes */}
       <Route path="/" element={
         <Layout role="customer">
-          <KioskMenu addToCart={addToCart} />
+          <KioskMenu items={menuItems} addToCart={addToCart} />
         </Layout>
       } />
       <Route path="/cart" element={
@@ -1398,6 +1498,8 @@ export default function App() {
                 onToggleAutoPrint={(val) => setKioskSettings(p => ({...p, autoPrint: val}))}
                 adminPin={adminPin}
                 onUpdateAdminPin={setAdminPin}
+                menuItems={menuItems}
+                onUpdateMenuItem={updateMenuItemImage}
               />
             </Layout>
           } />
