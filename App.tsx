@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Utensils, User, Clock, TrendingUp, Home, Coffee, Sparkles, Trash2, Plus, Minus, CheckCircle, LogOut, Play, Pause, Grid, IceCream, Sandwich, Soup, GlassWater, Beer, Printer, X, Settings, Download, FileSpreadsheet, Monitor, Lock, AlertCircle, Image as ImageIcon, Upload } from 'lucide-react';
+import { ShoppingCart, Utensils, User, Clock, TrendingUp, Home, Coffee, Sparkles, Trash2, Plus, Minus, CheckCircle, LogOut, Play, Pause, Grid, IceCream, Sandwich, Soup, GlassWater, Beer, Printer, X, Settings, Download, FileSpreadsheet, Monitor, Lock, AlertCircle, Image as ImageIcon, Upload, Calculator, Search, ChevronRight, PhilippinePeso } from 'lucide-react';
 import { MENU_ITEMS as INITIAL_MENU_ITEMS, STAFF_MEMBERS as INITIAL_STAFF_MEMBERS } from './constants';
 import { CartItem, Category, MenuItem, MenuItemVariant, Order, OrderStatus, StaffLog, StaffMember } from './types';
 import { getRecommendation } from './services/geminiService';
@@ -129,6 +129,9 @@ const Layout = ({ children, role }: { children?: React.ReactNode; role: 'custome
                 <Link to="/admin/dashboard" className="flex items-center gap-1 text-gray-600 hover:text-orange-600 font-medium transition-colors">
                    <TrendingUp size={20} /> <span className="hidden sm:inline">Dashboard</span>
                 </Link>
+                <Link to="/admin/pos" className="flex items-center gap-1 text-gray-600 hover:text-orange-600 font-medium transition-colors">
+                   <Calculator size={20} /> <span className="hidden sm:inline">POS</span>
+                </Link>
                 <Link to="/admin/orders" className="flex items-center gap-1 text-gray-600 hover:text-orange-600 font-medium transition-colors">
                    <Utensils size={20} /> <span className="hidden sm:inline">Kitchen</span>
                 </Link>
@@ -182,6 +185,7 @@ const KioskMenu = ({
   const [mood, setMood] = useState('');
   const [recommendation, setRecommendation] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   const filteredItems = activeCategory === 'All' 
     ? items 
@@ -208,6 +212,24 @@ const KioskMenu = ({
       default: return 'bg-gray-800 text-white';
     }
   };
+
+  if (showSplash) {
+    return (
+      <div 
+        onClick={() => setShowSplash(false)}
+        className="fixed inset-0 z-50 bg-stone-900 flex flex-col items-center justify-center text-white cursor-pointer animate-fade-in"
+      >
+        <div className="w-32 h-32 bg-orange-600 rounded-2xl flex items-center justify-center mb-8 shadow-2xl animate-bounce-slow">
+           <span className="font-handwriting text-6xl">H</span>
+        </div>
+        <h1 className="text-5xl font-bold font-handwriting mb-4 tracking-wider">Happy Hearts</h1>
+        <p className="text-xl text-stone-300 uppercase tracking-widest mb-12">Coffee & Prints</p>
+        <div className="px-8 py-4 border-2 border-white/30 rounded-full text-lg animate-pulse">
+           Tap anywhere to order
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -565,6 +587,260 @@ const AdminLogin = ({ onLogin, correctPin }: { onLogin: () => void, correctPin: 
           Login
         </button>
       </form>
+    </div>
+  );
+};
+
+// POS Component for Admin/Staff
+const POSView = ({ items, cart, addToCart, removeFromCart, updateQuantity, placePOSOrder }: { items: MenuItem[], cart: CartItem[], addToCart: (item: MenuItem, variant?: MenuItemVariant) => void, removeFromCart: (id: string) => void, updateQuantity: (id: string, delta: number) => void, placePOSOrder: (name: string) => void }) => {
+  const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All');
+  const [search, setSearch] = useState('');
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  
+  // Checkout Modal State
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [amountReceived, setAmountReceived] = useState('');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+
+  const total = cart.reduce((sum, item) => sum + ((item.selectedVariant?.price || item.basePrice || 0) * item.quantity), 0);
+  const change = (parseFloat(amountReceived) || 0) - total;
+
+  const filteredItems = items.filter(item => {
+    const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
+    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const launchKiosk = () => {
+    const baseUrl = window.location.href.split('#')[0];
+    const kioskUrl = `${baseUrl}#/`;
+    window.open(
+        kioskUrl, 
+        'HappyHeartsCustomerKiosk', 
+        'popup=yes,width=1024,height=768,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
+    );
+  };
+
+  const handleCheckout = () => {
+    if ((parseFloat(amountReceived) || 0) < total) return;
+    placePOSOrder('Walk-in');
+    setPaymentSuccess(true);
+    setTimeout(() => {
+      setIsCheckoutOpen(false);
+      setPaymentSuccess(false);
+      setAmountReceived('');
+    }, 2000);
+  };
+
+  const quickAddAmount = (amount: number) => {
+    const current = parseFloat(amountReceived) || 0;
+    setAmountReceived((current + amount).toString());
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-100px)] gap-6">
+      {/* Left: Menu */}
+      <div className="flex-grow flex flex-col w-2/3 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Search & Filter */}
+        <div className="p-4 border-b border-gray-100 flex gap-4 items-center">
+          <div className="relative flex-grow">
+            <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+            <input 
+              type="text" 
+              placeholder="Search items..." 
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-orange-400 outline-none"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <select 
+            className="p-2.5 rounded-lg border border-gray-200 bg-white outline-none font-medium text-gray-600"
+            value={activeCategory}
+            onChange={e => setActiveCategory(e.target.value as Category)}
+          >
+            <option value="All">All Categories</option>
+            {Object.values(Category).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+          
+          <button 
+            onClick={launchKiosk}
+            className="p-2.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition flex items-center gap-2"
+            title="Launch Customer Kiosk Window"
+          >
+             <Monitor size={20} />
+             <span className="hidden sm:inline font-bold">Launch Kiosk</span>
+          </button>
+        </div>
+
+        {/* Grid */}
+        <div className="flex-grow overflow-y-auto p-4 custom-scrollbar">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+             {filteredItems.map(item => (
+               <button 
+                 key={item.id}
+                 onClick={() => item.variants ? setSelectedItem(item) : addToCart(item)}
+                 className="flex flex-col items-start p-3 rounded-lg border border-gray-100 hover:border-orange-300 hover:bg-orange-50 transition text-left h-full"
+               >
+                 {item.image ? (
+                   <img src={item.image} alt={item.name} className="w-full h-24 object-cover rounded-md mb-2 bg-gray-100" />
+                 ) : (
+                    <div className="w-full h-12 bg-gray-100 rounded-md mb-2 flex items-center justify-center text-gray-400">
+                       <CategoryIcon category={item.category} />
+                    </div>
+                 )}
+                 <h4 className="font-bold text-gray-800 text-sm leading-tight mb-1">{item.name}</h4>
+                 <span className="text-orange-600 font-bold text-xs">
+                   P{item.variants ? item.variants[0].price : item.basePrice}
+                 </span>
+               </button>
+             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Right: Cart */}
+      <div className="w-1/3 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
+         <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+              <ShoppingCart size={18} /> Current Order
+            </h3>
+         </div>
+         
+         <div className="flex-grow overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            {cart.length === 0 ? (
+               <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                  <ShoppingCart size={32} className="mb-2 opacity-50"/>
+                  <p className="text-sm">Cart is empty</p>
+               </div>
+            ) : (
+              cart.map(item => (
+                <div key={item.cartId} className="flex justify-between items-center group">
+                   <div className="flex-grow">
+                      <p className="font-bold text-sm text-gray-800">{item.name}</p>
+                      {item.selectedVariant && <p className="text-xs text-gray-500">{item.selectedVariant.name}</p>}
+                      <p className="text-xs text-orange-600 font-bold">P{((item.selectedVariant?.price || item.basePrice || 0) * item.quantity).toFixed(2)}</p>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <div className="flex items-center border border-gray-200 rounded-lg">
+                        <button onClick={() => updateQuantity(item.cartId, -1)} className="px-2 py-1 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-l-lg">-</button>
+                        <span className="text-sm font-bold w-6 text-center">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.cartId, 1)} className="px-2 py-1 text-gray-500 hover:text-green-500 hover:bg-green-50 rounded-r-lg">+</button>
+                     </div>
+                     <button onClick={() => removeFromCart(item.cartId)} className="text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
+                   </div>
+                </div>
+              ))
+            )}
+         </div>
+
+         <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl">
+            <div className="flex justify-between mb-2 text-sm">
+               <span className="text-gray-500">Items:</span>
+               <span className="font-bold">{cart.reduce((a,b)=>a+b.quantity,0)}</span>
+            </div>
+            <div className="flex justify-between mb-4 text-xl font-bold text-gray-900">
+               <span>Total:</span>
+               <span>P{total.toFixed(2)}</span>
+            </div>
+            <button 
+              onClick={() => setIsCheckoutOpen(true)}
+              disabled={cart.length === 0}
+              className="w-full bg-gray-900 text-white py-3 rounded-lg font-bold hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+               Charge P{total.toFixed(2)}
+            </button>
+         </div>
+      </div>
+
+      {/* POS Variant Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-4 animate-scale-in">
+             <div className="flex justify-between items-center mb-4">
+               <h3 className="font-bold">{selectedItem.name}</h3>
+               <button onClick={() => setSelectedItem(null)}><X size={20}/></button>
+             </div>
+             <div className="space-y-2">
+               {selectedItem.variants?.map((v, i) => (
+                 <button 
+                   key={i} 
+                   onClick={() => { addToCart(selectedItem, v); setSelectedItem(null); }}
+                   className="w-full flex justify-between p-3 border border-gray-200 rounded-lg hover:bg-orange-50 hover:border-orange-300 transition"
+                 >
+                    <span>{v.name}</span>
+                    <span className="font-bold">P{v.price}</span>
+                 </button>
+               ))}
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* POS Payment Modal */}
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
+              {paymentSuccess && (
+                <div className="absolute inset-0 bg-green-500 z-10 flex flex-col items-center justify-center text-white animate-fade-in">
+                   <CheckCircle size={64} className="mb-4 animate-bounce"/>
+                   <h2 className="text-3xl font-bold">Paid!</h2>
+                   <p className="mt-2 text-green-100">Printing receipt...</p>
+                </div>
+              )}
+
+              <div className="flex justify-between items-start mb-6">
+                 <div>
+                   <h3 className="text-2xl font-bold text-gray-900">Payment</h3>
+                   <p className="text-gray-500">Order Total: <span className="text-orange-600 font-bold text-lg">P{total.toFixed(2)}</span></p>
+                 </div>
+                 <button onClick={() => setIsCheckoutOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={24}/></button>
+              </div>
+
+              <div className="mb-6">
+                 <label className="block text-sm font-medium text-gray-700 mb-2">Amount Tendered</label>
+                 <div className="relative">
+                    <PhilippinePeso className="absolute left-3 top-3.5 text-gray-400" size={20}/>
+                    <input 
+                      type="number" 
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-2xl font-bold focus:ring-2 focus:ring-orange-400 outline-none"
+                      placeholder="0.00"
+                      value={amountReceived}
+                      onChange={e => setAmountReceived(e.target.value)}
+                      autoFocus
+                    />
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2 mb-6">
+                 {[20, 50, 100, 200, 500, 1000].map(amt => (
+                   <button 
+                     key={amt} 
+                     onClick={() => quickAddAmount(amt)}
+                     className="py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold text-gray-700 text-sm"
+                   >
+                     +{amt}
+                   </button>
+                 ))}
+                 <button onClick={() => setAmountReceived(total.toString())} className="col-span-2 py-2 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg font-bold text-sm">Exact Amount</button>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-xl mb-6 flex justify-between items-center border border-gray-100">
+                 <span className="font-medium text-gray-600">Change Due:</span>
+                 <span className={`text-2xl font-bold ${change < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                    P{Math.max(0, change).toFixed(2)}
+                 </span>
+              </div>
+
+              <button 
+                onClick={handleCheckout}
+                disabled={change < 0}
+                className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold text-xl hover:bg-gray-800 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Printer size={24} /> Confirm & Print
+              </button>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1133,7 +1409,15 @@ const SettingsPage = ({
   };
 
   const launchKiosk = () => {
-    window.open('/#/', '_blank', 'popup=yes,width=1024,height=768');
+    // Fix: Dynamic URL generation based on current location to support all hosting environments
+    const baseUrl = window.location.href.split('#')[0];
+    const kioskUrl = `${baseUrl}#/`;
+    
+    window.open(
+        kioskUrl, 
+        'HappyHeartsCustomerKiosk', 
+        'popup=yes,width=1024,height=768,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
+    );
   };
 
   // Handle image file upload
@@ -1145,6 +1429,8 @@ const SettingsPage = ({
         onUpdateMenuItem(itemId, reader.result as string);
       };
       reader.readAsDataURL(file);
+      // Reset value to allow re-uploading the same file
+      e.target.value = '';
     }
   };
 
@@ -1353,15 +1639,68 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [staffLogs, setStaffLogs] = useState<StaffLog[]>([]);
-  const [staffList, setStaffList] = useState<StaffMember[]>(INITIAL_STAFF_MEMBERS);
+  const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
+  
+  // Persisted States with Lazy Initialization
+  const [staffList, setStaffList] = useState<StaffMember[]>(() => {
+    const saved = localStorage.getItem('staffList');
+    return saved ? JSON.parse(saved) : INITIAL_STAFF_MEMBERS;
+  });
+
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  const [kioskSettings, setKioskSettings] = useState({ autoPrint: false });
-  // New state for Admin PIN
-  const [adminPin, setAdminPin] = useState('1234');
-  // New state for Menu Items
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(INITIAL_MENU_ITEMS);
+
+  const [kioskSettings, setKioskSettings] = useState<{ autoPrint: boolean }>(() => {
+    const saved = localStorage.getItem('kioskSettings');
+    return saved ? JSON.parse(saved) : { autoPrint: false };
+  });
+
+  const [adminPin, setAdminPin] = useState(() => {
+    return localStorage.getItem('adminPin') || '1234';
+  });
+
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
+    const saved = localStorage.getItem('menuItems');
+    return saved ? JSON.parse(saved) : INITIAL_MENU_ITEMS;
+  });
   
   const navigate = useNavigate();
+
+  // --- Persistence Effects ---
+  useEffect(() => {
+    localStorage.setItem('staffList', JSON.stringify(staffList));
+  }, [staffList]);
+
+  useEffect(() => {
+    localStorage.setItem('kioskSettings', JSON.stringify(kioskSettings));
+  }, [kioskSettings]);
+
+  useEffect(() => {
+    localStorage.setItem('adminPin', adminPin);
+  }, [adminPin]);
+
+  useEffect(() => {
+    localStorage.setItem('menuItems', JSON.stringify(menuItems));
+  }, [menuItems]);
+
+  // --- Sync Tabs Effect ---
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'menuItems' && e.newValue) {
+        setMenuItems(JSON.parse(e.newValue));
+      }
+      if (e.key === 'kioskSettings' && e.newValue) {
+        setKioskSettings(JSON.parse(e.newValue));
+      }
+      if (e.key === 'adminPin' && e.newValue) {
+        setAdminPin(e.newValue);
+      }
+      if (e.key === 'staffList' && e.newValue) {
+        setStaffList(JSON.parse(e.newValue));
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const addToCart = (item: MenuItem, variant?: MenuItemVariant) => {
     setCart(prev => {
@@ -1378,35 +1717,57 @@ export default function App() {
   };
 
   const updateQuantity = (cartId: string, delta: number) => {
-    setCart(prev => prev.map(i => i.cartId === cartId ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i));
+    setCart(prev => prev.map(item => {
+      if (item.cartId === cartId) {
+        return { ...item, quantity: Math.max(1, item.quantity + delta) };
+      }
+      return item;
+    }));
   };
 
   const placeOrder = (customerName: string) => {
-    const total = cart.reduce((sum, item) => sum + ((item.selectedVariant?.price || item.basePrice || 0) * item.quantity), 0);
-    
-    // Generate sequential order number
-    const orderNumber = orders.length + 1;
-
     const newOrder: Order = {
       id: Date.now().toString(),
-      orderNumber: orderNumber, // Add the sequential number
+      orderNumber: orders.length + 1,
       items: [...cart],
-      total,
+      total: cart.reduce((sum, item) => sum + ((item.selectedVariant?.price || item.basePrice || 0) * item.quantity), 0),
       status: OrderStatus.Pending,
       timestamp: Date.now(),
-      customerName
+      customerName: customerName || undefined
     };
-    
+
     setOrders(prev => [...prev, newOrder]);
     setCart([]);
     navigate('/success', { state: { order: newOrder } });
+  };
+
+  const placePOSOrder = (customerName: string) => {
+    const newOrder: Order = {
+      id: Date.now().toString(),
+      orderNumber: orders.length + 1,
+      items: [...cart],
+      total: cart.reduce((sum, item) => sum + ((item.selectedVariant?.price || item.basePrice || 0) * item.quantity), 0),
+      status: OrderStatus.Pending,
+      timestamp: Date.now(),
+      customerName: customerName || undefined
+    };
+
+    setOrders(prev => [...prev, newOrder]);
+    setCart([]);
+    
+    // Auto print receipt immediately without navigating
+    setPrintingOrder(newOrder);
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   const updateOrderStatus = (id: string, status: OrderStatus) => {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
   };
 
-  const clockIn = (staffId: string) => {
+  // Staff Time Clock Handlers
+  const handleClockIn = (staffId: string) => {
     const staff = staffList.find(s => s.id === staffId);
     if (!staff) return;
 
@@ -1414,99 +1775,133 @@ export default function App() {
       id: Date.now().toString(),
       staffName: staff.name,
       clockIn: Date.now(),
-      date: new Date().toISOString().split('T')[0],
+      date: new Date().toLocaleDateString(),
       hourlyRate: staff.hourlyRate
     };
-    setStaffLogs(prev => [newLog, ...prev]);
+    setStaffLogs(prev => [...prev, newLog]);
   };
 
-  const clockOut = (logId: string) => {
-    setStaffLogs(prev => prev.map(l => l.id === logId ? { ...l, clockOut: Date.now() } : l));
+  const handleClockOut = (logId: string) => {
+    setStaffLogs(prev => prev.map(log => 
+      log.id === logId ? { ...log, clockOut: Date.now() } : log
+    ));
   };
 
-  const addStaff = (staff: StaffMember) => {
+  // Admin Settings Handlers
+  const handleAddStaff = (staff: StaffMember) => {
     setStaffList(prev => [...prev, staff]);
   };
 
-  const removeStaff = (id: string) => {
+  const handleRemoveStaff = (id: string) => {
     setStaffList(prev => prev.filter(s => s.id !== id));
   };
 
-  const updateMenuItemImage = (id: string, image: string | undefined) => {
-    setMenuItems(prev => prev.map(item => item.id === id ? { ...item, image } : item));
+  const handleUpdateMenuItem = (id: string, image: string | undefined) => {
+    setMenuItems(prev => prev.map(item => 
+      item.id === id ? { ...item, image } : item
+    ));
   };
 
   return (
-    <Routes>
-      {/* Public Customer Routes */}
-      <Route path="/" element={
-        <Layout role="customer">
-          <KioskMenu items={menuItems} addToCart={addToCart} />
-        </Layout>
-      } />
-      <Route path="/cart" element={
-        <Layout role="customer">
-          <CartPage 
-            cart={cart} 
-            updateQuantity={updateQuantity} 
-            removeFromCart={removeFromCart} 
-            placeOrder={placeOrder} 
-          />
-        </Layout>
-      } />
-      <Route path="/success" element={
-        <Layout role="customer">
-          <SuccessPage autoPrint={kioskSettings.autoPrint} />
-        </Layout>
-      } />
-      <Route path="/admin-login" element={
-        <Layout role="customer">
-          <AdminLogin onLogin={() => setIsAdminLoggedIn(true)} correctPin={adminPin} />
-        </Layout>
-      } />
+    <div className="print:block">
+       {/* Global Receipt Printer for POS */}
+       <Receipt order={printingOrder} />
 
-      {/* Admin Routes */}
-      {isAdminLoggedIn ? (
-        <>
-          <Route path="/admin/dashboard" element={
-            <Layout role="admin">
-              <AdminDashboard orders={orders} />
-            </Layout>
+       <Routes>
+        {/* Customer Routes */}
+        <Route path="/" element={
+          <Layout role="customer">
+            <KioskMenu items={menuItems} addToCart={addToCart} />
+          </Layout>
+        } />
+        <Route path="/cart" element={
+          <Layout role="customer">
+            <CartPage 
+              cart={cart} 
+              updateQuantity={updateQuantity} 
+              removeFromCart={removeFromCart} 
+              placeOrder={placeOrder}
+            />
+          </Layout>
+        } />
+        <Route path="/success" element={
+          <Layout role="customer">
+            <SuccessPage autoPrint={kioskSettings.autoPrint} />
+          </Layout>
+        } />
+
+        {/* Admin Login */}
+        <Route path="/admin-login" element={
+          <Layout role="customer">
+            <AdminLogin onLogin={() => setIsAdminLoggedIn(true)} correctPin={adminPin} />
+          </Layout>
+        } />
+
+        {/* Admin Routes */}
+        {isAdminLoggedIn ? (
+          <>
+            <Route path="/admin/dashboard" element={
+              <Layout role="admin">
+                <AdminDashboard orders={orders} />
+              </Layout>
+            } />
+            <Route path="/admin/pos" element={
+              <Layout role="admin">
+                <POSView 
+                   items={menuItems} 
+                   cart={cart}
+                   addToCart={addToCart}
+                   removeFromCart={removeFromCart}
+                   updateQuantity={updateQuantity}
+                   placePOSOrder={placePOSOrder}
+                />
+              </Layout>
+            } />
+            <Route path="/admin/orders" element={
+              <Layout role="admin">
+                <KitchenView orders={orders} updateStatus={updateOrderStatus} />
+              </Layout>
+            } />
+            <Route path="/admin/attendance" element={
+              <Layout role="admin">
+                <StaffClock 
+                  logs={staffLogs} 
+                  staffMembers={staffList}
+                  onClockIn={handleClockIn}
+                  onClockOut={handleClockOut}
+                />
+              </Layout>
+            } />
+            <Route path="/admin/settings" element={
+              <Layout role="admin">
+                <SettingsPage 
+                  staffMembers={staffList} 
+                  onAddStaff={handleAddStaff}
+                  onRemoveStaff={handleRemoveStaff}
+                  autoPrint={kioskSettings.autoPrint}
+                  onToggleAutoPrint={(val) => setKioskSettings({autoPrint: val})}
+                  adminPin={adminPin}
+                  onUpdateAdminPin={setAdminPin}
+                  menuItems={menuItems}
+                  onUpdateMenuItem={handleUpdateMenuItem}
+                />
+              </Layout>
+            } />
+          </>
+        ) : (
+          // Redirect to login if accessing admin routes without login
+          <Route path="/admin/*" element={
+            <div className="flex flex-col items-center justify-center h-screen bg-gray-50">
+               <AlertCircle size={48} className="text-red-500 mb-4"/>
+               <h2 className="text-2xl font-bold text-gray-800 mb-2">Access Denied</h2>
+               <p className="text-gray-500 mb-6">Please log in to access the admin dashboard.</p>
+               <Link to="/admin-login" className="bg-gray-900 text-white px-6 py-2 rounded-lg font-bold">
+                 Go to Login
+               </Link>
+            </div>
           } />
-          <Route path="/admin/orders" element={
-            <Layout role="admin">
-              <KitchenView orders={orders} updateStatus={updateOrderStatus} />
-            </Layout>
-          } />
-          <Route path="/admin/attendance" element={
-            <Layout role="admin">
-              <StaffClock 
-                logs={staffLogs} 
-                staffMembers={staffList} 
-                onClockIn={clockIn} 
-                onClockOut={clockOut} 
-              />
-            </Layout>
-          } />
-          <Route path="/admin/settings" element={
-            <Layout role="admin">
-              <SettingsPage 
-                staffMembers={staffList} 
-                onAddStaff={addStaff} 
-                onRemoveStaff={removeStaff} 
-                autoPrint={kioskSettings.autoPrint}
-                onToggleAutoPrint={(val) => setKioskSettings(p => ({...p, autoPrint: val}))}
-                adminPin={adminPin}
-                onUpdateAdminPin={setAdminPin}
-                menuItems={menuItems}
-                onUpdateMenuItem={updateMenuItemImage}
-              />
-            </Layout>
-          } />
-        </>
-      ) : (
-         <Route path="/admin/*" element={<AdminLogin onLogin={() => setIsAdminLoggedIn(true)} correctPin={adminPin} />} />
-      )}
-    </Routes>
+        )}
+      </Routes>
+    </div>
   );
 }
