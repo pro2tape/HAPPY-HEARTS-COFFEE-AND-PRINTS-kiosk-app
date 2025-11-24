@@ -13,7 +13,7 @@ const Receipt = ({ order }: { order: Order | null }) => {
   if (!order) return null;
   
   // Format order number to 3 digits (e.g., 001)
-  const orderNum = order.orderNumber.toString().padStart(3, '0');
+  const orderNum = order.orderNumber?.toString().padStart(3, '0') || '---';
 
   return (
     <div className="hidden print:block print:w-full font-mono text-xs leading-tight">
@@ -34,7 +34,7 @@ const Receipt = ({ order }: { order: Order | null }) => {
 
          <hr className="border-dashed border-black my-2"/>
          
-         {order.items.map((item, i) => (
+         {order.items && order.items.map((item, i) => (
            <div key={i} className="mb-2">
              <div className="flex justify-between font-bold">
                <span>{item.quantity}x {item.name}</span>
@@ -75,7 +75,7 @@ const Receipt = ({ order }: { order: Order | null }) => {
 
          <hr className="border-dashed border-black my-2"/>
          
-         {order.items.map((item, i) => (
+         {order.items && order.items.map((item, i) => (
            <div key={i} className="mb-2">
              <div className="flex justify-between font-bold">
                <span>{item.quantity}x {item.name}</span>
@@ -187,14 +187,17 @@ const KioskMenu = ({
   const [isThinking, setIsThinking] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
+  // Ensure items is an array
+  const safeItems = Array.isArray(items) ? items : [];
+
   const filteredItems = activeCategory === 'All' 
-    ? items 
-    : items.filter(i => i.category === activeCategory);
+    ? safeItems 
+    : safeItems.filter(i => i.category === activeCategory);
 
   const handleAiRecommend = async () => {
     if(!mood) return;
     setIsThinking(true);
-    const rec = await getRecommendation(mood, items);
+    const rec = await getRecommendation(mood, safeItems);
     setRecommendation(rec);
     setIsThinking(false);
   };
@@ -605,7 +608,9 @@ const POSView = ({ items, cart, addToCart, removeFromCart, updateQuantity, place
   const total = cart.reduce((sum, item) => sum + ((item.selectedVariant?.price || item.basePrice || 0) * item.quantity), 0);
   const change = (parseFloat(amountReceived) || 0) - total;
 
-  const filteredItems = items.filter(item => {
+  const safeItems = Array.isArray(items) ? items : [];
+
+  const filteredItems = safeItems.filter(item => {
     const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -862,6 +867,8 @@ const KitchenView = ({ orders, updateStatus }: { orders: Order[], updateStatus: 
   };
 
   const sortedOrders = useMemo(() => {
+    // Check if orders is array
+    if (!Array.isArray(orders)) return [];
     return [...orders].sort((a, b) => b.timestamp - a.timestamp);
   }, [orders]);
 
@@ -882,7 +889,7 @@ const KitchenView = ({ orders, updateStatus }: { orders: Order[], updateStatus: 
             }`}>
               <div className="flex justify-between items-start mb-3">
                 <div>
-                  <span className="font-bold text-2xl text-gray-900">#{order.orderNumber.toString().padStart(3, '0')}</span>
+                  <span className="font-bold text-2xl text-gray-900">#{order.orderNumber?.toString().padStart(3, '0') || '---'}</span>
                   {order.customerName && <span className="block text-sm text-gray-500">{order.customerName}</span>}
                 </div>
                 <div className="flex items-center gap-2">
@@ -910,7 +917,7 @@ const KitchenView = ({ orders, updateStatus }: { orders: Order[], updateStatus: 
               </div>
               
               <div className="space-y-2 mb-4 max-h-60 overflow-y-auto custom-scrollbar">
-                {order.items.map((item, idx) => (
+                {order.items && order.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between text-sm border-b border-dashed border-gray-100 pb-1">
                     <span className="font-medium text-gray-800">{item.quantity}x {item.name}</span>
                     {item.selectedVariant && <span className="text-gray-500 text-xs">{item.selectedVariant.name}</span>}
@@ -962,9 +969,12 @@ const KitchenView = ({ orders, updateStatus }: { orders: Order[], updateStatus: 
 };
 
 const AdminDashboard = ({ orders }: { orders: Order[] }) => {
+  // Validate orders input
+  const safeOrders = Array.isArray(orders) ? orders : [];
+
   // Exclude cancelled orders from metrics
-  const validOrders = orders.filter(o => o.status !== OrderStatus.Cancelled);
-  const cancelledOrders = orders.filter(o => o.status === OrderStatus.Cancelled).length;
+  const validOrders = safeOrders.filter(o => o.status !== OrderStatus.Cancelled);
+  const cancelledOrders = safeOrders.filter(o => o.status === OrderStatus.Cancelled).length;
 
   const totalRevenue = validOrders.reduce((sum, order) => sum + order.total, 0);
   const completedOrders = validOrders.filter(o => o.status === OrderStatus.Completed).length;
@@ -989,29 +999,31 @@ const AdminDashboard = ({ orders }: { orders: Order[] }) => {
     
     // Exclude cancelled items
     ordersList.filter(o => o.status !== OrderStatus.Cancelled).forEach(order => {
-      order.items.forEach(item => {
-        const variantName = item.selectedVariant ? ` (${item.selectedVariant.name})` : '';
-        const fullName = item.name + variantName;
-        const key = item.id + (item.selectedVariant ? `-${item.selectedVariant.name}` : '');
-        const price = (item.selectedVariant?.price || item.basePrice || 0);
-        
-        if (!stats[key]) {
-          stats[key] = {
-            name: fullName,
-            category: item.category,
-            quantity: 0,
-            total: 0
-          };
-        }
-        stats[key].quantity += item.quantity;
-        stats[key].total += item.quantity * price;
-      });
+      if (order.items) {
+        order.items.forEach(item => {
+          const variantName = item.selectedVariant ? ` (${item.selectedVariant.name})` : '';
+          const fullName = item.name + variantName;
+          const key = item.id + (item.selectedVariant ? `-${item.selectedVariant.name}` : '');
+          const price = (item.selectedVariant?.price || item.basePrice || 0);
+          
+          if (!stats[key]) {
+            stats[key] = {
+              name: fullName,
+              category: item.category,
+              quantity: 0,
+              total: 0
+            };
+          }
+          stats[key].quantity += item.quantity;
+          stats[key].total += item.quantity * price;
+        });
+      }
     });
 
     return Object.values(stats).sort((a, b) => b.total - a.total);
   };
 
-  const aggregatedItems = getAggregatedItems(orders);
+  const aggregatedItems = getAggregatedItems(safeOrders);
 
   // Filter for Daily Stats
   const todayRevenue = validOrders
@@ -1054,7 +1066,7 @@ const AdminDashboard = ({ orders }: { orders: Order[] }) => {
     filteredOrders.forEach(o => {
       const date = new Date(o.timestamp).toLocaleDateString();
       const time = new Date(o.timestamp).toLocaleTimeString();
-      const items = o.items.map(i => `${i.quantity}x ${i.name}`).join('; ');
+      const items = o.items ? o.items.map(i => `${i.quantity}x ${i.name}`).join('; ') : '';
       // Escape quotes in items
       const escapedItems = items.replace(/"/g, '""');
       csvContent += `${o.orderNumber},${date},${time},${o.customerName || 'Guest'},"${escapedItems}",${o.total.toFixed(2)},${o.status}\n`;
@@ -1242,8 +1254,12 @@ const AdminDashboard = ({ orders }: { orders: Order[] }) => {
 const StaffClock = ({ logs, staffMembers, onClockIn, onClockOut }: { logs: StaffLog[], staffMembers: StaffMember[], onClockIn: (id: string) => void, onClockOut: (logId: string) => void }) => {
   const [selectedStaff, setSelectedStaff] = useState('');
   
+  // Safe parsing for inputs
+  const safeLogs = Array.isArray(logs) ? logs : [];
+  const safeMembers = Array.isArray(staffMembers) ? staffMembers : [];
+
   // Check if selected staff is currently clocked in
-  const activeLog = logs.find(l => l.staffName === staffMembers.find(s => s.id === selectedStaff)?.name && !l.clockOut);
+  const activeLog = safeLogs.find(l => l.staffName === safeMembers.find(s => s.id === selectedStaff)?.name && !l.clockOut);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -1259,7 +1275,7 @@ const StaffClock = ({ logs, staffMembers, onClockIn, onClockOut }: { logs: Staff
             onChange={(e) => setSelectedStaff(e.target.value)}
           >
             <option value="">Select Staff Member</option>
-            {staffMembers.map(staff => (
+            {safeMembers.map(staff => (
               <option key={staff.id} value={staff.id}>{staff.name}</option>
             ))}
           </select>
@@ -1303,7 +1319,7 @@ const StaffClock = ({ logs, staffMembers, onClockIn, onClockOut }: { logs: Staff
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {logs.map(log => {
+            {safeLogs.map(log => {
               const hours = log.clockOut ? (log.clockOut - log.clockIn) / (1000 * 60 * 60) : 0;
               const pay = hours * log.hourlyRate;
               
@@ -1324,7 +1340,7 @@ const StaffClock = ({ logs, staffMembers, onClockIn, onClockOut }: { logs: Staff
                 </tr>
               );
             })}
-            {logs.length === 0 && (
+            {safeLogs.length === 0 && (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-gray-400">No logs found.</td>
               </tr>
@@ -1367,6 +1383,9 @@ const SettingsPage = ({
   const [confirmPinInput, setConfirmPinInput] = useState('');
   const [pwdError, setPwdError] = useState('');
   const [pwdSuccess, setPwdSuccess] = useState('');
+
+  const safeMembers = Array.isArray(staffMembers) ? staffMembers : [];
+  const safeMenuItems = Array.isArray(menuItems) ? menuItems : [];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1527,7 +1546,7 @@ const SettingsPage = ({
                </tr>
              </thead>
              <tbody className="divide-y divide-gray-50">
-               {menuItems.map(item => (
+               {safeMenuItems.map(item => (
                  <tr key={item.id} className="hover:bg-gray-50">
                    <td className="p-3 font-medium">{item.name}</td>
                    <td className="p-3 text-gray-500">
@@ -1613,7 +1632,7 @@ const SettingsPage = ({
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h3 className="font-bold text-lg mb-4 text-gray-800">Manage Staff</h3>
           <div className="space-y-3">
-            {staffMembers.map(staff => (
+            {safeMembers.map(staff => (
               <div key={staff.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
                  <div>
                    <p className="font-bold text-gray-900">{staff.name}</p>
@@ -1639,11 +1658,15 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   
-  // Persisted States with Lazy Initialization and Error Handling
+  // Persisted States with Lazy Initialization and Strict Type Checking
+  // This prevents White Screens caused by "JSON.parse" returning null or invalid structures
+  
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
       const saved = localStorage.getItem('orders');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
     } catch (e) {
       console.error("Failed to parse orders from storage", e);
       return [];
@@ -1653,7 +1676,9 @@ export default function App() {
   const [staffLogs, setStaffLogs] = useState<StaffLog[]>(() => {
     try {
       const saved = localStorage.getItem('staffLogs');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
     } catch (e) {
       console.error("Failed to parse staffLogs from storage", e);
       return [];
@@ -1663,7 +1688,9 @@ export default function App() {
   const [staffList, setStaffList] = useState<StaffMember[]>(() => {
     try {
       const saved = localStorage.getItem('staffList');
-      return saved ? JSON.parse(saved) : INITIAL_STAFF_MEMBERS;
+      if (!saved) return INITIAL_STAFF_MEMBERS;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : INITIAL_STAFF_MEMBERS;
     } catch (e) {
        console.error("Failed to parse staffList from storage", e);
        return INITIAL_STAFF_MEMBERS;
@@ -1690,7 +1717,9 @@ export default function App() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
     try {
       const saved = localStorage.getItem('menuItems');
-      return saved ? JSON.parse(saved) : INITIAL_MENU_ITEMS;
+      if (!saved) return INITIAL_MENU_ITEMS;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : INITIAL_MENU_ITEMS;
     } catch (e) {
        console.error("Failed to parse menuItems from storage", e);
        return INITIAL_MENU_ITEMS;
@@ -1731,12 +1760,23 @@ export default function App() {
   // --- Sync Tabs Effect (Persistence Across Windows) ---
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'menuItems' && e.newValue) setMenuItems(JSON.parse(e.newValue));
-      if (e.key === 'kioskSettings' && e.newValue) setKioskSettings(JSON.parse(e.newValue));
+      // Safely parse incoming data to prevent crashes
+      const safeParse = (val: string | null, fallback: any) => {
+        try {
+          if (!val) return fallback;
+          const p = JSON.parse(val);
+          return p === null ? fallback : p; 
+        } catch { 
+          return fallback; 
+        }
+      };
+
+      if (e.key === 'menuItems') setMenuItems(safeParse(e.newValue, INITIAL_MENU_ITEMS));
+      if (e.key === 'kioskSettings') setKioskSettings(safeParse(e.newValue, { autoPrint: false }));
       if (e.key === 'adminPin' && e.newValue) setAdminPin(e.newValue);
-      if (e.key === 'staffList' && e.newValue) setStaffList(JSON.parse(e.newValue));
-      if (e.key === 'orders' && e.newValue) setOrders(JSON.parse(e.newValue));
-      if (e.key === 'staffLogs' && e.newValue) setStaffLogs(JSON.parse(e.newValue));
+      if (e.key === 'staffList') setStaffList(safeParse(e.newValue, INITIAL_STAFF_MEMBERS));
+      if (e.key === 'orders') setOrders(safeParse(e.newValue, []));
+      if (e.key === 'staffLogs') setStaffLogs(safeParse(e.newValue, []));
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
