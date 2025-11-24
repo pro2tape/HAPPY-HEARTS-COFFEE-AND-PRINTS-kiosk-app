@@ -1637,21 +1637,50 @@ const SettingsPage = ({
 // Main App Component
 export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [staffLogs, setStaffLogs] = useState<StaffLog[]>([]);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   
-  // Persisted States with Lazy Initialization
-  const [staffList, setStaffList] = useState<StaffMember[]>(() => {
-    const saved = localStorage.getItem('staffList');
-    return saved ? JSON.parse(saved) : INITIAL_STAFF_MEMBERS;
+  // Persisted States with Lazy Initialization and Error Handling
+  const [orders, setOrders] = useState<Order[]>(() => {
+    try {
+      const saved = localStorage.getItem('orders');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to parse orders from storage", e);
+      return [];
+    }
   });
 
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [staffLogs, setStaffLogs] = useState<StaffLog[]>(() => {
+    try {
+      const saved = localStorage.getItem('staffLogs');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to parse staffLogs from storage", e);
+      return [];
+    }
+  });
+
+  const [staffList, setStaffList] = useState<StaffMember[]>(() => {
+    try {
+      const saved = localStorage.getItem('staffList');
+      return saved ? JSON.parse(saved) : INITIAL_STAFF_MEMBERS;
+    } catch (e) {
+       console.error("Failed to parse staffList from storage", e);
+       return INITIAL_STAFF_MEMBERS;
+    }
+  });
+
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
+    return sessionStorage.getItem('isAdminLoggedIn') === 'true';
+  });
 
   const [kioskSettings, setKioskSettings] = useState<{ autoPrint: boolean }>(() => {
-    const saved = localStorage.getItem('kioskSettings');
-    return saved ? JSON.parse(saved) : { autoPrint: false };
+    try {
+      const saved = localStorage.getItem('kioskSettings');
+      return saved ? JSON.parse(saved) : { autoPrint: false };
+    } catch (e) {
+      return { autoPrint: false };
+    }
   });
 
   const [adminPin, setAdminPin] = useState(() => {
@@ -1659,8 +1688,13 @@ export default function App() {
   });
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
-    const saved = localStorage.getItem('menuItems');
-    return saved ? JSON.parse(saved) : INITIAL_MENU_ITEMS;
+    try {
+      const saved = localStorage.getItem('menuItems');
+      return saved ? JSON.parse(saved) : INITIAL_MENU_ITEMS;
+    } catch (e) {
+       console.error("Failed to parse menuItems from storage", e);
+       return INITIAL_MENU_ITEMS;
+    }
   });
   
   const navigate = useNavigate();
@@ -1682,21 +1716,27 @@ export default function App() {
     localStorage.setItem('menuItems', JSON.stringify(menuItems));
   }, [menuItems]);
 
-  // --- Sync Tabs Effect ---
+  useEffect(() => {
+    localStorage.setItem('orders', JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem('staffLogs', JSON.stringify(staffLogs));
+  }, [staffLogs]);
+
+  useEffect(() => {
+    sessionStorage.setItem('isAdminLoggedIn', String(isAdminLoggedIn));
+  }, [isAdminLoggedIn]);
+
+  // --- Sync Tabs Effect (Persistence Across Windows) ---
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'menuItems' && e.newValue) {
-        setMenuItems(JSON.parse(e.newValue));
-      }
-      if (e.key === 'kioskSettings' && e.newValue) {
-        setKioskSettings(JSON.parse(e.newValue));
-      }
-      if (e.key === 'adminPin' && e.newValue) {
-        setAdminPin(e.newValue);
-      }
-      if (e.key === 'staffList' && e.newValue) {
-        setStaffList(JSON.parse(e.newValue));
-      }
+      if (e.key === 'menuItems' && e.newValue) setMenuItems(JSON.parse(e.newValue));
+      if (e.key === 'kioskSettings' && e.newValue) setKioskSettings(JSON.parse(e.newValue));
+      if (e.key === 'adminPin' && e.newValue) setAdminPin(e.newValue);
+      if (e.key === 'staffList' && e.newValue) setStaffList(JSON.parse(e.newValue));
+      if (e.key === 'orders' && e.newValue) setOrders(JSON.parse(e.newValue));
+      if (e.key === 'staffLogs' && e.newValue) setStaffLogs(JSON.parse(e.newValue));
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
